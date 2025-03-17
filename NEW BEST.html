@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Card Draw System</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: black;
+      overflow: hidden;
+      user-select: none;
+      font-family: sans-serif;
+    }
+
+    #click-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      cursor: pointer;
+    }
+
+    .card-row {
+      position: absolute;
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      gap: 60px;
+      z-index: 5;
+    }
+
+    .first-row { top: 100px; }
+    .second-row { top: 450px; }
+
+    .card {
+      width: 180px;
+      height: 260px;
+      background-image: url('images/card_back.png');
+      background-size: cover;
+      background-position: center;
+      position: relative;
+      transform: translateY(-600px);
+      z-index: 10;
+      border-radius: 10px;
+      overflow: visible;
+      cursor: pointer;
+      opacity: 0;
+    }
+
+    .card.flip {
+      animation: flipCard 0.8s ease, enlargeCard 0.8s ease;
+    }
+
+    @keyframes flipCard {
+      0% {
+        transform: translateY(0) scale(1) rotateY(0deg);
+      }
+      50% {
+        transform: translateY(0) scale(1.2) rotateY(90deg);
+      }
+      100% {
+        transform: translateY(0) scale(1) rotateY(0deg);
+      }
+    }
+
+    @keyframes enlargeCard {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.2);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .aura {
+      position: absolute;
+      top: -15px; left: -15px;
+      width: 210px; height: 290px;
+      border-radius: 22px;
+      z-index: -2;
+      pointer-events: none;
+      opacity: 0.7;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 10px 5px var(--aura-color); }
+      50%  { box-shadow: 0 0 25px 15px var(--aura-color); }
+      100% { box-shadow: 0 0 10px 5px var(--aura-color); }
+    }
+
+    .shiny-border {
+      position: absolute;
+      top: -8px;
+      left: -8px;
+      width: calc(100% + 16px);
+      height: calc(100% + 16px);
+      border-radius: 12px;
+      overflow: hidden;
+      z-index: -3;
+      pointer-events: none;
+    }
+
+    .shiny-border::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: conic-gradient(var(--aura-color), transparent, var(--aura-color));
+      animation: rotateShine 4s linear infinite;
+      opacity: 0.8;
+    }
+
+    @keyframes rotateShine {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    #info-panel {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      color: white;
+      display: none;
+      max-width: 300px;
+      padding: 10px;
+      border: 1px solid white;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 10px;
+      z-index: 20;
+      white-space: pre-line; 
+    }
+
+    #effect-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: white;
+      display: none;
+      max-width: 300px;
+      padding: 10px;
+      border: 1px solid white;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 10px;
+      z-index: 20;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+
+<div id="click-overlay"></div>
+<div id="info-panel"></div>
+<div id="effect-panel"></div>
+
+<script>
+  const cardData = [
+    { name: 'Embodiment of fear', rarity: 'Superrare', image: 'images/embodimentoffear.png', description: 'Recurring Nightmare\nEldritch - Status\nCost: 5 Sanity (2/round)\n\nOppose mental with a target within 5. If you succeed, that target automatically rolls the noted result on the Chaos Table. If you fail, you roll the noted result on the Inverted Chaos Table instead.', effect: 'nothing' },
+    { name: 'Void avatar', rarity: 'Superrare', image: 'images/voidavatar.png', description: 'Revel\nEldritch - Reaction Status\nCost: 6 Sanity\n\nActivate this ability whenever anything other than you rolls a result on the Chaos table.\n\nYou may have you or an ally gain an effect within ZEL/6 of that roll on the Inverted Chaos Table, then gain that effect again.', effect: 'nothing' },
+    { name: 'Cruelty of nature', rarity: 'rare', image: 'images/crueltyofnature.png', description: 'Voidborn Ire\nEldritch - Stance\nCost:(5 Health or 3 Sanity)/Round\n\nAt the start of each Enemys turn, if theyre within 2 of you, they roll on the Chaos table.', effect: 'nothing' },
+    { name: 'Body over mind', rarity: 'common', image: 'images/bodyovermind.png', description: 'No additional effect.', effect: 'nothing' },
+    { name: 'Darkness spreads', rarity: 'common', image: 'images/darknessspreads.png', description: 'No additional effect.', effect: 'nothing' },
+    { name: 'Failure', rarity: 'common', image: 'images/failure.png', description: 'No additional effect.', effect: 'Power: Attacks inflict [Chaos-Potential 4X]. When [Chaos-Potential] triggers, the target rolls 1 time on the Chaos Table.' },
+    { name: 'Fanaticism', rarity: 'uncommon', image: 'images/fanactism.png', description: 'No additional effect.', effect: 'nothing' },
+    { name: 'Forgiveness', rarity: 'rare', image: 'images/forgiveness.png', description: 'No additional effect.', effect: 'nothing' },
+    { name: 'Heavily arm-ed', rarity: 'rare', image: 'images/heavilyarmed.png', description: 'Extra Limbs\nEldritch - Status\nCost: 5 Sanity (1/Round).\n\nGain 1 Action. Attacks made with this action have [Blunder 100/ZEL].', effect: 'Blunder X: Your crit fails are applied on accuracy rolls of 1+X. If present at the same time with [Precision X] and would overlap in effect range, both instead cancel out and do nothing on the overlapping range. [Piercing X] also acts the same, but is worth half as much as [Precision X].\n\nPrecision X: Your crits are now applied on (20 - X) on accuracy rolls.\n\nPiercing X: Your mini-crits are now applied on (20 - X) on Accuracy Rolls. Piercing values of 20 or higher also grant you [Precision X-19].' },
+    { name: 'Mothers gift', rarity: 'uncommon', image: 'images/mothersgift.png', description: 'Voidborns Favor\nEldritch - Stance\nCost: (2 Health or 1 Sanity) / Round\n\nWhen you enter this stance and at the start of your turn, roll on the Inverted Chaos Table.', effect: 'nothing' },
+    { name: 'Rift wielder', rarity: 'uncommon', image: 'images/riftwielder.png', description: `Void Tendril\nEldritch - Ranged Magical\nCost: 1 Action, 3 Sanity\n\nDeal 1d20 Eldritch damage to a target within ZEL/2. Alter the damage roll by ±ZEL-5. This attack phases through obstacles, but has disadvantage if it does.`, effect: 'Eldritch X: Attacks inflict [Chaos-Potential 4X]. When [Chaos-Potential] triggers, the target rolls 1 time on the Chaos Table.' },
+    { name: 'Sacrosanct', rarity: 'uncommon', image: 'images/sacrosanct.png', description: 'No additional effect.', effect: 'Eldritch X: Attacks inflict [Chaos-Potential 4X]. When [Chaos-Potential] triggers, the target rolls 1 time on the Chaos Table.' },
+    { name: 'Living Weapon', rarity: 'rare', image: 'images/livingweapon.png', description: 'No additional effect.', effect: 'Advantage: Applies to d20 rolls. Roll twice and use the highest number.\n\nEldritch X: Attacks inflict [Chaos-Potential 4X]. When [Chaos-Potential] triggers, the target rolls 1 time on the Chaos Table.\n\nInnate: does something idk' },
+    { name: 'Void Breach', rarity: 'common', image: 'images/voidbreach.png', description: 'Glimpse\nEldritch - Status\nCost: 8 Sanity (2/Combat)\n\nTarget creature within 5 rolls (ZEL/5) times on the Chaos Table if they are an enemy, or on the Inverted Chaos Table if they are an ally or yourself. Choose one result to keep from the ones rolled. Then that creature rolls that result an additional two times.', effect: 'nothing' },
+  ];
+
+  const sounds = {
+    drop: new Audio('sounds/card_drop.mp3'),
+    reveal: new Audio('sounds/card_reveal.mp3'),
+    slam: new Audio('sounds/card_slam.mp3')
+  };
+
+  let drawnCards = [];
+  let revealedCards = [];
+  let isDrawing = false;
+  let isDropping = false;
+
+  const secondRowDropStartY = -1200;
+  const secondRowDelay = 1000;
+
+  function getAuraColor(rarity) {
+    switch (rarity.toLowerCase()) {
+      case 'common': return 'rgba(128,128,128,0.7)';
+      case 'uncommon': return 'rgba(0,255,0,0.7)';
+      case 'rare': return 'rgba(128,0,128,0.7)';
+      case 'superrare': return 'rgba(255,105,180,0.7)';
+      default: return 'rgba(255,255,255,0.7)';
+    }
+  }
+
+  function resetDraw() {
+    drawnCards = [];
+    revealedCards = [];
+    isDrawing = false;
+    isDropping = false;
+    document.querySelectorAll('.card-row').forEach(e => e.remove());
+    document.getElementById('info-panel').style.display = 'none';
+    document.getElementById('effect-panel').style.display = 'none';
+  }
+
+  function shuffle(array) {
+    return array.slice().sort(() => Math.random() - 0.5);
+  }
+
+  function drawCards() {
+    resetDraw();
+    isDrawing = true;
+    isDropping = true;
+
+    const commons = cardData.filter(c => ['common', 'uncommon'].includes(c.rarity.toLowerCase()));
+    const rares = cardData.filter(c => ['rare', 'superrare'].includes(c.rarity.toLowerCase()));
+
+    const firstRowCards = shuffle(commons).slice(0, 5);
+    const secondRowCards = shuffle(rares).slice(0, 2);
+
+    drawnCards = [...firstRowCards, ...secondRowCards];
+
+    spawnRow(firstRowCards, 'first-row');
+
+    setTimeout(() => {
+      spawnRow(secondRowCards, 'second-row', true);
+      const totalDropTime = secondRowCards.length * 300 + 500;
+      setTimeout(() => {
+        isDropping = false;
+      }, totalDropTime);
+    }, secondRowDelay);
+  }
+
+  function spawnRow(cards, rowClass, isSecondRow = false) {
+    const row = document.createElement('div');
+    row.classList.add('card-row', rowClass);
+
+    cards.forEach((card, index) => {
+      const cardDiv = document.createElement('div');
+      cardDiv.classList.add('card');
+      cardDiv.dataset.index = drawnCards.indexOf(card);
+
+      cardDiv.style.transition = 'none';
+      cardDiv.style.opacity = '0';
+      cardDiv.style.transform = `translateY(${isSecondRow ? secondRowDropStartY : -600}px)`;
+
+      const aura = document.createElement('div');
+      aura.classList.add('aura');
+      aura.style.setProperty('--aura-color', getAuraColor(card.rarity));
+
+      const shine = document.createElement('div');
+      shine.classList.add('shiny-border');
+      shine.style.setProperty('--aura-color', getAuraColor(card.rarity));
+
+      cardDiv.appendChild(aura);
+      cardDiv.appendChild(shine);
+      row.appendChild(cardDiv);
+
+      document.body.appendChild(row);
+
+      if (isSecondRow && index === 0) {
+        requestAnimationFrame(() => {
+          void cardDiv.offsetHeight;
+          requestAnimationFrame(() => {
+            cardDiv.style.transition = 'transform 0.5s ease, opacity 0.5s ease';
+            cardDiv.style.opacity = '1';
+            cardDiv.style.transform = 'translateY(0)';
+            sounds.drop.currentTime = 0;
+            sounds.drop.play();
+          });
+        });
+      } else {
+        void cardDiv.offsetHeight;
+        setTimeout(() => {
+          cardDiv.style.transition = 'transform 0.5s ease, opacity 0.5s ease';
+          cardDiv.style.opacity = '1';
+          cardDiv.style.transform = 'translateY(0)';
+          sounds.drop.currentTime = 0;
+          sounds.drop.play();
+        }, 100 * index);
+      }
+
+      cardDiv.addEventListener('click', () => revealCard(cardDiv, card));
+
+      cardDiv.addEventListener('mouseover', () => {
+        if (revealedCards.includes(card)) {
+          showInfo(card);
+          showEffect(card);
+        }
+      });
+      cardDiv.addEventListener('mouseout', () => {
+        document.getElementById('info-panel').style.display = 'none';
+        document.getElementById('effect-panel').style.display = 'none';
+      });
+    });
+
+    document.body.appendChild(row);
+  }
+
+  function revealCard(cardDiv, card) {
+    if (revealedCards.includes(card)) return;
+    revealedCards.push(card);
+
+    if (!cardDiv.classList.contains('flip')) {
+      sounds.reveal.currentTime = 0;
+      sounds.reveal.play();
+    }
+
+    cardDiv.classList.add('flip');
+
+    setTimeout(() => {
+      if (!cardDiv.classList.contains('slammed')) {
+        sounds.slam.currentTime = 0;
+        sounds.slam.play();
+        cardDiv.classList.add('slammed');
+      }
+    }, 400);
+
+    setTimeout(() => {
+      cardDiv.style.backgroundImage = `url('${card.image}')`;
+    }, 500);
+  }
+
+  function showInfo(card) {
+    const infoPanel = document.getElementById('info-panel');
+    infoPanel.style.display = 'block';
+    infoPanel.innerHTML = `<p>${card.description}</p>`;
+  }
+
+  function showEffect(card) {
+    const effectPanel = document.getElementById('effect-panel');
+    effectPanel.style.display = 'block';
+    effectPanel.innerHTML = `<p>${card.effect}</p>`;
+  }
+
+  document.getElementById('click-overlay').addEventListener('click', () => {
+    if (!isDrawing && !isDropping) {
+      drawCards();
+    }
+  });
+</script>
+</body>
+</html>
